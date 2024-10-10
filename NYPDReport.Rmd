@@ -1,0 +1,180 @@
+---
+---
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year.
+
+## Import Library
+
+```{r library, message=FALSE, warning=FALSE}
+# install.packages("tidyverse")
+library(tidyverse)
+library(lubridate)
+```
+
+## Load Data
+
+-   `read_csv()` reads comma delimited files
+
+```{r load}
+df = read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+head(df)
+```
+
+## Tidy and Transform Data
+
+```{r}
+df_2 = df %>% select(INCIDENT_KEY, 
+                   OCCUR_DATE,
+                   OCCUR_TIME,
+                   BORO, 
+                   STATISTICAL_MURDER_FLAG,
+                   PERP_AGE_GROUP,
+                   PERP_SEX,
+                   PERP_RACE,
+                   VIC_AGE_GROUP,
+                   VIC_SEX,
+                   VIC_RACE,
+                   Latitude,
+                   Longitude)
+
+# Return the column name along with the missing values
+lapply(df_2, function(x) sum(is.na(x)))
+```
+
+Understanding the reasons why data are missing is important for handling the remaining data correctly. There's a fair amount of unidentifiable data on perpetrators (age, race, or sex.) Those cases are possibly still active and ongoing investigation. In fear of missing meaningful information, I handle this group of missing data by calling them as another group of "Unknown".
+
+Key observations on data type conversion are:
+
+-   **INCIDENT_KEY** should be treated as a string.
+-   **BORO** should be treated as a factor.
+-   **PERP_AGE_GROUP** should be treated as a factor.
+-   **PERP_SEX** should be treated as a factor.
+-   **PERP_RACE** should be treated as a factor.
+-   **VIC_AGE_GROUP** should be treated as a factor.
+-   **VIC_SEX** should be treated as a factor.
+-   **VIC_RACE** should be treated as a factor.
+
+```{r}
+# Tidy and transform data
+df_2 = df_2 %>% 
+  replace_na(list(PERP_AGE_GROUP = "Unknown", PERP_SEX = "Unknown", PERP_RACE = "Unknown"))
+
+# Remove extreme values in data
+df_2 = subset(df_2, PERP_AGE_GROUP!="1020" & PERP_AGE_GROUP!="224" & PERP_AGE_GROUP!="940")
+
+df_2$PERP_AGE_GROUP = recode(df_2$PERP_AGE_GROUP, UNKNOWN = "Unknown")
+df_2$PERP_SEX = recode(df_2$PERP_SEX, U = "Unknown")
+df_2$PERP_RACE = recode(df_2$PERP_RACE, UNKNOWN = "Unknown")
+df_2$VIC_SEX   = recode(df_2$VIC_SEX, U = "Unknown")
+df_2$VIC_RACE   = recode(df_2$VIC_RACE, UNKNOWN = "Unknown")
+df_2$INCIDENT_KEY = as.character(df_2$INCIDENT_KEY)
+df_2$BORO = as.factor(df_2$BORO)
+df_2$PERP_AGE_GROUP = as.factor(df_2$PERP_AGE_GROUP)
+df_2$PERP_SEX = as.factor(df_2$PERP_SEX)
+df_2$PERP_RACE = as.factor(df_2$PERP_RACE)
+df_2$VIC_AGE_GROUP = as.factor(df_2$VIC_AGE_GROUP)
+df_2$VIC_SEX = as.factor(df_2$VIC_SEX)
+df_2$VIC_RACE = as.factor(df_2$VIC_RACE)
+
+# Return summary statistics
+summary(df_2)
+```
+
+## Visualizations and Analysis
+
+Which part of New York has the most number of incidents? Of those incidents, how many are murder cases?
+
+Brooklyn is the first in terms of the number of incidents, followed by Bronx and Queens respectively.
+
+```{r}
+g <- ggplot(df_2, aes(x = BORO)) +
+  geom_bar() +
+  labs(title = "Boroughs of New York City",
+       x = "Boroughs of New York City",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+
+```{r}
+table(df_2$BORO, df_2$STATISTICAL_MURDER_FLAG)
+```
+
+2.  Which day and time should people in New York be cautious of falling into victims of crime?
+
+-   Weekends in NYC have the most chances of incidents.
+-   Historically occurs in the evening and night time.
+
+```{r}
+df_2$OCCUR_DAY = mdy(df_2$OCCUR_DATE)
+df_2$OCCUR_DAY = wday(df_2$OCCUR_DAY, label = TRUE)
+df_2$OCCUR_HOUR = hour(hms(as.character(df_2$OCCUR_TIME)))
+
+df_3 = df_2 %>%
+  group_by(OCCUR_DAY) %>%
+  count()
+
+df_4 = df_2 %>%
+  group_by(OCCUR_HOUR) %>%
+  count()
+```
+
+```{r}
+g <- ggplot(df_3, aes(x = OCCUR_DAY, y = n)) +
+  geom_col() +
+  labs(title = "Which day should people in New York be cautious of incidents?",
+       x = "Incident Occurence Day",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+
+```{r}
+g <- ggplot(df_4, aes(x = OCCUR_HOUR, y = n)) +
+  geom_line() +
+  labs(title = "Which time should people in New York be cautious of incidents?",
+       x = "Incident Occurence Hour",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+
+3.  The Profile of Perpetrators and Victims
+
+-   There's a significant number of incidents in the age group of 25-44 and 18-24.
+-   African American and White Hispanic stood out in the number of incidents in Boroughs of New York City.
+-   There are significantly more incidents with Male sex than those of Female sex.
+
+```{r}
+table(df_2$PERP_AGE_GROUP, df_2$VIC_AGE_GROUP)
+```
+
+```{r}
+table(df_2$PERP_SEX, df_2$VIC_SEX)
+```
+
+```{r}
+table(df_2$PERP_RACE, df_2$VIC_RACE)
+```
+
+## Step 4: Identifying Bias
+
+This analysis provides valuable insights into the patterns and trends of shooting incidents in New York City over the years. Key findings include:
+
+```         
+Geographical Distribution: Brooklyn has the highest number of shooting incidents, followed by the Bronx and Queens.
+  Factors like socioeconomic status, neighborhood characteristics, or law enforcement intensity are not included but may influence shooting incidents.
+
+Temporal Patterns: Incidents peak during weekends and in the evening hours.
+
+Demographics: Most incidents involve male perpetrators and victims, with significant representation in the 18-44 age groups.
+
+  By filtering out extreme age groups, we might be excluding legitimate cases, potentially biasing the age-related analysis.
+```
+
+In addition, there may be reporting bias involved by the NYPD, which underreporting or inconsistencies in data entry can impact the accuracy of the above-model. Some of the bias also involves being labeled as 'Unknown' which in this case, is impacting the analysis.
